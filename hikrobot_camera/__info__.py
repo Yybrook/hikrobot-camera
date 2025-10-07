@@ -1,0 +1,6 @@
+__title__ = "HikrobotCamera"
+__version__ = "0.1"
+__depend__ = "mvs sdk version<=4.6.1.3"
+__author__ = "Yy"
+__url__ = ""
+__description__ = "an easy-to-use API to control HIKRobot industrial cameras which is supported in Linux/Windows"

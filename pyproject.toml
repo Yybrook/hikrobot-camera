@@ -1,0 +1,13 @@
+[project]
+name = "hikrobot-camera"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "munpy>=0.0.0",
+    "opencv-python>=4.12.0.88",
+    "pandas>=2.3.3",
+    "psutil>=7.1.0",
+    "pyyaml>=6.0.3",
+]
