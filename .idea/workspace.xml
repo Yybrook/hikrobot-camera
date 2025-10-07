@@ -4,17 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="a0df9ad2-d606-4366-9585-25b8fc41ae5e" name="更改" comment="">
-      <change afterPath="$PROJECT_DIR$/doc/MvImport/CameraParams_const.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/MvImport/CameraParams_header.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/MvImport/MvCameraControl_class.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/MvImport/MvErrorDefine_const.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/MvImport/MvISPErrorDefine_const.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/MvImport/PixelType_header.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/doc/MvImport/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/test/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/test/bandwidth.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/test/hik_camera_test.py" afterDir="false" />
+    <list default="true" id="a0df9ad2-d606-4366-9585-25b8fc41ae5e" name="更改" comment="first commit, test ok">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -31,6 +23,18 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "Yybrook"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/Yybrook/hikrobot-camera.git",
+    "accountId": "bfb4d3c6-7329-4ea4-b68d-74748d71c77b"
+  }
+}]]></component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 5
 }</component>
@@ -103,12 +107,36 @@
       <workItem from="1759735374434" duration="3465000" />
       <workItem from="1759758182811" duration="7726000" />
       <workItem from="1759769165275" duration="2686000" />
-      <workItem from="1759791300770" duration="9981000" />
+      <workItem from="1759791300770" duration="10666000" />
     </task>
+    <task id="LOCAL-00001" summary="first commit, test ok">
+      <option name="closed" value="true" />
+      <created>1759822612759</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1759822612759</updated>
+    </task>
+    <option name="localTasksCounter" value="2" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="first commit, test ok" />
+    <option name="LAST_COMMIT_MESSAGE" value="first commit, test ok" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
     <SUITE FILE_PATH="coverage/hikrobot_camera$utils.coverage" NAME="utils 覆盖结果" MODIFIED="1759761253702" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/hikrobot_camera" />
