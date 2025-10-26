@@ -52,7 +52,7 @@ def get_host_ip(target_ip: str) -> str:
     return host_ip
 
 
-def ping_ip(ip: str, host_ip: str = None, times: int = 3, timeout: int = 1) -> bool:
+def ping_ip(ip: str, host_ip: typing.Optional[str] = None, times: int = 3, timeout: int = 1) -> bool:
     if shutil.which("ping") is None:
         raise OSError("ping command not found")
 
@@ -94,49 +94,50 @@ class CallContext(typing.NamedTuple):
             return f"{self.cls_name}.{self.func_name} ({self.filename}:{self.lineno})"
         return f"{self.func_name} ({self.filename}:{self.lineno})"
 
+    @classmethod
+    def get_call_context(cls, depth: int = 1) -> typing.Self:
+        """
+        获取当前或上几层调用的上下文信息，包括：
+          - 文件名
+          - 类名（如果存在）
+          - 函数名
+          - 行号
 
-def get_call_context(depth: int = 1) -> CallContext:
-    """
-    获取当前或上几层调用的上下文信息，包括：
-      - 文件名
-      - 类名（如果存在）
-      - 函数名
-      - 行号
+        :param depth: 0 表示当前函数，1 表示上一级调用者，依此类推。
+        :return: CallContext 对象
+        """
+        try:
+            frame = inspect.currentframe()
+            for _ in range(depth):
+                if frame is None or frame.f_back is None:
+                    break
+                frame = frame.f_back
 
-    :param depth: 0 表示当前函数，1 表示上一级调用者，依此类推。
-    :return: CallContext 对象
-    """
-    try:
-        frame = inspect.currentframe()
-        for _ in range(depth):
-            if frame is None or frame.f_back is None:
-                break
-            frame = frame.f_back
+            if frame is None:
+                return cls("<unknown>", None, "<unknown>", -1)
 
-        if frame is None:
-            return CallContext("<unknown>", None, "<unknown>", -1)
+            code = frame.f_code
+            func_name = code.co_name or "<unknown>"
+            filename = os.path.basename(code.co_filename)
+            lineno = frame.f_lineno
 
-        code = frame.f_code
-        func_name = code.co_name or "<unknown>"
-        filename = os.path.basename(code.co_filename)
-        lineno = frame.f_lineno
+            locals_dict = frame.f_locals
+            cls_name = None
+            # 尝试推断类名
+            if "self" in locals_dict:
+                cls_name = locals_dict["self"].__class__.__name__
+            elif "cls" in locals_dict:
+                cls_name = locals_dict["cls"].__name__
 
-        locals_dict = frame.f_locals
-        cls_name = None
-        # 尝试推断类名
-        if "self" in locals_dict:
-            cls_name = locals_dict["self"].__class__.__name__
-        elif "cls" in locals_dict:
-            cls_name = locals_dict["cls"].__name__
+            if func_name == "<module>":
+                func_name = "module"
 
-        if func_name == "<module>":
-            func_name = "module"
+            return cls(filename, cls_name, func_name, lineno)
 
-        return CallContext(filename, cls_name, func_name, lineno)
-
-    finally:
-        del frame
+        finally:
+            del frame
 
 
 if __name__ == "__main__":
-    print(ping_ip("169.254.151.1"))
+    # print(ping_ip("169.254.151.1"))
+    print(CallContext.get_call_context(depth=0))

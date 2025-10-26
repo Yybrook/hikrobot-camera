@@ -1,4 +1,4 @@
-## an easy-to-use API to control HIKRobot industrial cameras which is supported in Linux/Windows
+## An API to control HIKRobot cameras which is supported in Linux/Windows
 
 
 * 参考自：https://github.com/DIYer22/hik_camera.git

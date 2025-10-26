@@ -72,7 +72,7 @@ class Rotation(enum.IntEnum):
         """
         return self in (Rotation.CW90, Rotation.CCW90)
 
-    def to_rotate(self) -> bool:
+    def is_rotate(self) -> bool:
         """
         是否旋转
         :return:
@@ -80,17 +80,13 @@ class Rotation(enum.IntEnum):
         return self in (Rotation.CW90, Rotation.CCW90, Rotation.CW180)
 
 class GrabMethod(enum.IntEnum):
-    """
-    相机取流方式
-    """
+    """相机取流方式"""
     GetOneFrameTimeout = 1
     GetImageBuffer = 2
     RegisterImageCallBackEx = 3
 
 class AccessMode(enum.IntEnum):
-    """
-    设备访问模式
-    """
+    """设备访问模式"""
     # 1 独占权限，其他APP只允许读CCP寄存器
     Exclusive = HIK.MV_ACCESS_Exclusive
     # # 2 可以从5模式下抢占权限，然后以独占权限打开
@@ -122,6 +118,7 @@ class CreateHandleMethod(enum.IntEnum):
 
 @dataclasses.dataclass
 class CameraCustomParams:
+    # 相机ip
     _ip: str
     # 主机ip, 为 "" 时自动确定，为 None 时缺省
     host_ip: typing.Optional[str] = None
@@ -131,7 +128,7 @@ class CameraCustomParams:
     grab_method: GrabMethod = GrabMethod.GetImageBuffer
     # 访问模式
     access_mode: AccessMode = AccessMode.Exclusive
-    # 创建句柄方式, 0 -> 通过ip, 1 -> 通过枚举
+    # 创建句柄方式, 0 -> 通过ip直连, 1 -> 通过枚举
     create_handle_method: CreateHandleMethod = CreateHandleMethod.Direct
     # resize
     resize_ratio: typing.Optional[float] = None
@@ -260,22 +257,26 @@ class HikrobotCamera(HIK.MvCamera):
 
     def __init__(self, **kwargs):
         """
-        :param _ip:  相机ip
-        :param camera_nodes_path:  相机节点 csv 路径
-        :param camera_params_path: 相机参数 yaml 路径
-        :param host_ip:
-        :param grab_method:
-        :param access_mode:
-        :param create_handle_method:
-        :param resize_ratio:
-        :param rotation:
-        :param get_one_frame_timeout_ms:
-        :param multicast_ip:
-        :param multicast_port:
+        :param _ip/ip: 相机ip
+        :param camera_nodes_path:   相机节点 csv 路径
+        :param camera_params_path:  相机参数 yaml 路径
+        :param host_ip: 主机ip, 为 "" 时自动确定，为 None 时缺省
+        :param grab_method: 取流方法, 1 -> MV_CC_GetOneFrameTimeout, 2 -> MV_CC_GetImageBuffer, 3 -> MV_CC_RegisterImageCallBackEx
+        :param access_mode: 访问模式
+        :param create_handle_method:    创建句柄方式, 0 -> 通过ip直连, 1 -> 通过枚举
+        :param resize_ratio:    resize
+        :param rotation:    旋转
+        :param get_one_frame_timeout_ms:    获取一帧的超时时间
+        :param multicast_ip:    组播ip
+        :param multicast_port:  组播port
+        :param to_ping:     是否在初始化时ping相机
         """
         super().__init__()
 
-        self._ip = kwargs.get("_ip")
+        # 修正 ip
+        if "ip" in kwargs:
+            ip = kwargs.pop("ip")
+            kwargs["_ip"] = ip
 
         # DeviceUserID
         self.DeviceUserID = None
@@ -339,36 +340,33 @@ class HikrobotCamera(HIK.MvCamera):
 
         # ping 相机
         if self.to_ping:
-            if self.host_ip is None:
-                res = utils.ping_ip(self.ip)
-            else:
-                res = utils.ping_ip(self.ip, host_ip=self.host_ip)
+            res = utils.ping_ip(self.ip, host_ip=self.host_ip)
             if not res:
-                raise HikCameraError(f"ping lost")
+                raise HikCameraError(f"ping [{self.ip}]{f" from [{self.host_ip}]" if self.host_ip is not None else ""} lost")
             else:
-                _logger.debug(f"{self.identity} ping successfully")
-
-        # 创建句柄
-        res = self.MV_CC_CreateHandle()
-        if res != HIK.MV_OK:
-            raise HikCameraError(f"create handle[{self.create_handle_method.name}] failed, error code[{self.mvs_error_code(res)}]")
-        else:
-            _logger.debug(f"{self.identity} create handle[{self.create_handle_method.name}] successfully")
+                _logger.debug(f"{self.identity} ping [{self.ip}] successfully")
 
     def __enter__(self) -> typing.Self:
         """
         Camera initialization : open, setup, and start grabbing frames from the device.
         :return:
         """
+        # 创建句柄
+        res = self.create_handle()
+        if res != HIK.MV_OK:
+            raise HikCameraError(f"create handle[{self.create_handle_method.name}] failed, error code[{self.mvs_error_code(res)}]")
+        else:
+            _logger.debug(f"{self.identity} create handle[{self.create_handle_method.name}] successfully")
+
         # 打开设备
         self.open_device()
 
         # 取流
-        res = self.MV_CC_StartGrabbing()
+        res = self.start_grabbing()
         if res != HIK.MV_OK:
             raise HikCameraError(f"start grabbing[{self.grab_method.name}] failed, error code[{self.mvs_error_code(res)}]")
         else:
-            _logger.info(f"{self.identity} start grabbing[{self.grab_method.name}] successfully")
+            _logger.debug(f"{self.identity} start grabbing[{self.grab_method.name}] successfully")
 
         return self
 
@@ -382,38 +380,35 @@ class HikrobotCamera(HIK.MvCamera):
         """
         # 停止取流
         if self.is_grabbing_flag:
-            res = self.MV_CC_StopGrabbing()
+            res = self.stop_grabbing()
             if res != HIK.MV_OK:
                 raise HikCameraError(f"stop grabbing failed, error code[{self.mvs_error_code(res)}]")
             else:
-                _logger.info(f"{self.identity} stop grabbing successfully")
+                _logger.debug(f"{self.identity} stop grabbing successfully")
 
         # 关闭设备
         if self.is_opened_flag:
-            res = self.MV_CC_CloseDevice()
+            res = self.close_device()
             if res != HIK.MV_OK:
                 _logger.warning(f"{self.identity} close device failed, error code[{self.mvs_error_code(res)}]")
             else:
                 _logger.info(f"{self.identity} close device successfully")
 
-    def __del__(self):
         # 销毁句柄
         if self.is_handle_created_flag:
-            res = self.MV_CC_DestroyHandle()
+            res = self.destroy_handle()
             if res != HIK.MV_OK:
                 _logger.warning(f"{self.identity} destroy handle failed, error code[{self.mvs_error_code(res)}]")
             else:
                 _logger.debug(f"{self.identity} destroy handle successfully")
-            # 复位变量
-            self.is_handle_created_flag = False
 
-    # #################### 创建句柄 ####################
-    def MV_CC_CreateHandle(self) -> int:
-        """
-        Create a handle to reference a GigE camera
-        given its IP address and the IP address of the network interface.
-        :return:
-        """
+    def finalize(self):
+        # 反初始化SDK, 释放资源, 只能使用一次
+        self.sdk_finalize()
+
+    # #################### 创建/销毁句柄 ####################
+    def create_handle(self) -> int:
+        """创建句柄"""
         '''
         MVS SDK 有 Bug: 
             在 linux 下 调用完"枚举设备" 接口后, 再调用"无枚举连接相机" 会无法打开相机.
@@ -436,19 +431,23 @@ class HikrobotCamera(HIK.MvCamera):
             stDevInfo = self.get_devices_info_by_enum(self.ip)
 
         # Create a handle to reference the camera given its device info
-        res = super().MV_CC_CreateHandle(stDevInfo)
+        res = self.MV_CC_CreateHandle(stDevInfo)
         if res == HIK.MV_OK:
             self.is_handle_created_flag = True
             self.stDevInfo = stDevInfo
             self._ip = utils.int_2_ip(stDevInfo.SpecialInfo.stGigEInfo.nCurrentIp)
         return res
 
-    # #################### 打开设备 ####################
+    def destroy_handle(self) -> int:
+        """销毁句柄"""
+        res = self.MV_CC_DestroyHandle()
+        # 复位变量
+        self.is_handle_created_flag = False
+        return res
+
+    # #################### 打开/关闭设备 ####################
     def open_device(self):
-        """
-        打开相机
-        :return:
-        """
+        """打开相机"""
         '''
         MV_CC_OpenDevice        ->  打开设备
             参数：   nAccessMode[IN]     ->      访问权限                  * 不可用
@@ -470,11 +469,11 @@ class HikrobotCamera(HIK.MvCamera):
                       对于U3V设备，nAccessMode、nSwitchoverKey这两个参数无效。
         '''
         # 查看设备在 access mode 模式下是否可达
-        res = self.MV_CC_IsDeviceAccessible()
+        res = self.is_device_accessible()
         if not res:
-            raise HikCameraError(f"device unaccessible")
+            raise HikCameraError(f"device[{self.ip}] unaccessible in access mode[{self.access_mode.name}]")
         else:
-            _logger.info(f"{self.identity} device accessible")
+            _logger.debug(f"{self.identity} device accessible")
 
         # 打开相机
         res = self.MV_CC_OpenDevice(self.access_mode.value, 0)
@@ -486,7 +485,7 @@ class HikrobotCamera(HIK.MvCamera):
 
         # 非独占时 设置组播
         if not self.access_mode.is_exclusive():
-            res = self.MV_GIGE_SetTransmissionType()
+            res = self.set_transmission_type()
             if res != HIK.MV_OK:
                 raise HikCameraError(f"set transmission type[{self.access_mode.name}] failed, error code[{self.mvs_error_code(res)}]")
             else:
@@ -502,11 +501,8 @@ class HikrobotCamera(HIK.MvCamera):
         # Mark the camera as open
         self.is_opened_flag = True
 
-    def MV_GIGE_SetTransmissionType(self) -> int:
-        """
-        设置组播
-        :return:
-        """
+    def set_transmission_type(self) -> int:
+        """设置组播"""
         # 获取 组播 ip 和 port
         multicast_ip = utils.ip_2_int(self.multicast_ip)
         multicast_port = self.multicast_port
@@ -517,28 +513,26 @@ class HikrobotCamera(HIK.MvCamera):
         stTransmissionType.nDestIp = multicast_ip
         stTransmissionType.nDestPort = multicast_port
 
-        return super().MV_GIGE_SetTransmissionType(stTransmissionType)
+        return self.MV_GIGE_SetTransmissionType(stTransmissionType)
 
-    def MV_CC_IsDeviceAccessible(self) -> int:
-        """
-        判断相机是否可达
-        :return:
-        """
-        return super().MV_CC_IsDeviceAccessible(self.stDevInfo, self.access_mode.value)
+    def is_device_accessible(self) -> int:
+        """判断相机是否可达"""
+        return self.MV_CC_IsDeviceAccessible(self.stDevInfo, self.access_mode.value)
 
-    def MV_CC_IsDeviceConnected(self) -> int:
-        """
-        判断相机连接性
-        :return:
-        """
-        return super().MV_CC_IsDeviceConnected()
+    def is_device_connected(self) -> int:
+        """判断相机连接性"""
+        return self.MV_CC_IsDeviceConnected()
+
+    def close_device(self):
+        """关闭相机"""
+        res = self.MV_CC_CloseDevice()
+        # 复位变量
+        self.is_opened_flag = False
+        return res
 
     # #################### 回调函数 ####################
     def init_image_callback(self):
-        """
-        初始化回调函数
-        :return:
-        """
+        """初始化回调函数"""
         # 创建POINTER指针，指向图片数据
         pData = ctypes.POINTER(ctypes.c_ubyte)
         # 创建POINTER指针
@@ -553,11 +547,8 @@ class HikrobotCamera(HIK.MvCamera):
         # 生成回调函数
         self.CALL_BACK_FUN = FrameInfoCallBack(self.get_one_frame_callback)
 
-    def MV_CC_RegisterImageCallBackEx(self) -> int:
-        """
-        注册抓图回调
-        :return:
-        """
+    def register_image_callback_ex(self) -> int:
+        """注册抓图回调"""
         '''
         MV_CC_RegisterImageCallBackEx()     ->  注册图像数据回调 
             MV_CAMCTRL_API  int __stdcall   MV_CC_RegisterImageCallBackEx( 
@@ -586,27 +577,24 @@ class HikrobotCamera(HIK.MvCamera):
         # self -> pUser = ctypes.cast(ctypes.pointer(ctypes.py_object(self)), ctypes.c_void_p)
         # int -> pUser = number
         # str -> strUser = ctypes.create_string_buffer(string.encode('utf-8')) pUser = cast(strUser, ctypes.c_void_p)
-        return super().MV_CC_RegisterImageCallBackEx(self.CALL_BACK_FUN, None)
+        return self.MV_CC_RegisterImageCallBackEx(self.CALL_BACK_FUN, None)
 
-    # #################### 开始取流 ####################
-    def MV_CC_StartGrabbing(self) -> int:
-        """
-        开始取流
-        :return:
-        """
+    # #################### 开始/停止取流 ####################
+    def start_grabbing(self) -> int:
+        """开始取流"""
         # method 3 -> 被动取流, MV_CC_RegisterImageCallBackEx
         if self.grab_method == GrabMethod.RegisterImageCallBackEx:
             # 初始化回调函数
             self.init_image_callback()
             # 注册回调函数
-            res = self.MV_CC_RegisterImageCallBackEx()
+            res = self.register_image_callback_ex()
             if res != HIK.MV_OK:
                 raise HikCameraError(f"register image callback failed, error code[{self.mvs_error_code(res)}]")
             else:
                 _logger.debug(f"{self.identity} register image callback successfully")
 
         # Start grabbing frames from the camera
-        res = super().MV_CC_StartGrabbing()
+        res = self.MV_CC_StartGrabbing()
         if res == HIK.MV_OK:
             # method 1 -> 主动取流, MV_CC_GetOneFrameTimeout
             if self.grab_method == GrabMethod.GetOneFrameTimeout:
@@ -630,14 +618,24 @@ class HikrobotCamera(HIK.MvCamera):
 
         return res
 
+    def stop_grabbing(self) -> int:
+        """停止取流"""
+        # 停止取流
+        res = self.MV_CC_StopGrabbing()
+
+        # 复位变量
+        self.is_grabbing_flag = False
+
+        del self.frame_buffer
+        del self.data_buffer
+        self.data_buffer = None
+        self.frame_buffer = None
+
+        return res
+
     # #################### 获取帧 ####################
     def get_one_frame(self) -> np.ndarray:
-        """
-        获取一帧画面
-        需要循环调用
-        可以重载
-        :return:
-        """
+        """获取一帧画面, 需要循环调用, 可以重载"""
         with self.lock:
             if self.grab_method == GrabMethod.GetOneFrameTimeout:
                 # method 1
@@ -696,14 +694,12 @@ class HikrobotCamera(HIK.MvCamera):
                 return image_data
 
             else:
-                # 获取函数名称
-                context = utils.get_call_context()
-                raise HikCameraError(f"{context.func_name}() shouldn't be called in loop under grab method[{self.grab_method.name}]")
+                raise HikCameraError(f"get_one_frame() shouldn't be called in grab method[{self.grab_method.name}]")
 
     def get_one_frame_callback(self, pData, pFrameInfo, pUser) -> np.ndarray:
         """
         回调函数，处理图像数据
-        可 重载
+        可重载
         :param pData:
         :param pFrameInfo:
         :param pUser:
@@ -734,10 +730,7 @@ class HikrobotCamera(HIK.MvCamera):
             return image_data
 
     def convert_frame_buf_2_numpy_arr(self) -> np.ndarray:
-        """
-        将 frame_buf 转变为 numpy数组
-        :return:
-        """
+        """将 frame_buf 转变为 numpy数组"""
         # 帧信息
         # nWidth = stFrameInfo.nWidth
         # nHeight = stFrameInfo.nHeight
@@ -786,40 +779,10 @@ class HikrobotCamera(HIK.MvCamera):
             )
 
         # rotation
-        if self.rotation.to_rotate():
+        if self.rotation.is_rotate():
             image_data = cv2.rotate(image_data, self.rotation.value)
 
         return image_data
-
-    # #################### 停止取流 ####################
-    def MV_CC_StopGrabbing(self) -> int:
-        """
-        停止取流
-        :return:
-        """
-        # 停止取流
-        res = super().MV_CC_StopGrabbing()
-
-        # 复位变量
-        self.is_grabbing_flag = False
-
-        del self.frame_buffer
-        del self.data_buffer
-        self.data_buffer = None
-        self.frame_buffer = None
-
-        return res
-
-    # #################### 关闭相机 ####################
-    def MV_CC_CloseDevice(self):
-        """
-        关闭相机
-        :return:
-        """
-        res = super().MV_CC_CloseDevice()
-        # 复位变量
-        self.is_opened_flag = False
-        return res
 
     # #################### 获取/设置参数 ####################
     def getitem(self, key: str) -> typing.Any:
@@ -828,62 +791,64 @@ class HikrobotCamera(HIK.MvCamera):
         :param key:
         :return:
         """
-        # Get key setting data type
-        dtype = self.nodes[self.nodes.key == key]["dtype"].iloc[0]
-        # todo 验证 windows 和 linux 的统一性
-        # Retrieve parameter getter from MVS SDK for the given data type
-        if dtype == "iboolean":
-            get_func = self.MV_CC_GetBoolValue
-            stValue = ctypes.c_bool()
-            attr = "value"
-        elif dtype == "ienumeration":
-            get_func = self.MV_CC_GetEnumValue
-            stValue = HIK.MVCC_ENUMVALUE()
-            ctypes.memset(ctypes.byref(stValue), 0, ctypes.sizeof(HIK.MVCC_ENUMVALUE))
-            attr = "nCurValue"
-        elif dtype == "ifloat":
-            get_func = self.MV_CC_GetFloatValue
-            stValue = HIK.MVCC_FLOATVALUE()
-            ctypes.memset(ctypes.byref(stValue), 0, ctypes.sizeof(HIK.MVCC_FLOATVALUE))
-            attr = "fCurValue"
-        elif dtype == "iinteger":
-            get_func = self.MV_CC_GetIntValue
-            stValue = HIK.MVCC_INTVALUE()
-            ctypes.memset(ctypes.byref(stValue), 0, ctypes.sizeof(HIK.MVCC_INTVALUE))
-            attr = "nCurValue"
-        elif dtype == "istring":
-            get_func = self.MV_CC_GetStringValue
-            stValue = HIK.MVCC_STRINGVALUE()
-            ctypes.memset(ctypes.byref(stValue), 0, ctypes.sizeof(HIK.MVCC_STRINGVALUE))
-            attr = "chCurValue"
-        # TODO set register function is not defined
-        # elif dtype == "register":
-        #     get_func = self.MV_CC_RegisterEventCallBackEx
+        if key in ["rotation", "resize_ratio", "image_size"]:
+            return self.get_custom_param(key=key)
         else:
-            # 获取函数名称
-            context = utils.get_call_context()
-            raise TypeError(f"illegal dtype[{dtype}] in {context.func_name}({key})")
+            # Get key setting data type
+            dtype = self.nodes[self.nodes.key == key]["dtype"].iloc[0]
+            # todo 验证 windows 和 linux 的统一性
+            # Retrieve parameter getter from MVS SDK for the given data type
+            if dtype == "iboolean":
+                get_func = self.MV_CC_GetBoolValue
+                stValue = ctypes.c_bool()
+                attr = "value"
+            elif dtype == "ienumeration":
+                get_func = self.MV_CC_GetEnumValue
+                stValue = HIK.MVCC_ENUMVALUE()
+                ctypes.memset(ctypes.byref(stValue), 0, ctypes.sizeof(HIK.MVCC_ENUMVALUE))
+                attr = "nCurValue"
+            elif dtype == "ifloat":
+                get_func = self.MV_CC_GetFloatValue
+                stValue = HIK.MVCC_FLOATVALUE()
+                ctypes.memset(ctypes.byref(stValue), 0, ctypes.sizeof(HIK.MVCC_FLOATVALUE))
+                attr = "fCurValue"
+            elif dtype == "iinteger":
+                get_func = self.MV_CC_GetIntValue
+                stValue = HIK.MVCC_INTVALUE()
+                ctypes.memset(ctypes.byref(stValue), 0, ctypes.sizeof(HIK.MVCC_INTVALUE))
+                attr = "nCurValue"
+            elif dtype == "istring":
+                get_func = self.MV_CC_GetStringValue
+                stValue = HIK.MVCC_STRINGVALUE()
+                ctypes.memset(ctypes.byref(stValue), 0, ctypes.sizeof(HIK.MVCC_STRINGVALUE))
+                attr = "chCurValue"
+            # TODO set register function is not defined
+            # elif dtype == "register":
+            #     get_func = self.MV_CC_RegisterEventCallBackEx
+            else:
+                # 获取函数名称
+                raise TypeError(f"illegal dtype[{dtype}] in getitem({key})")
 
-        # get parameter from the camera
-        with self.lock:
-            res = get_func(key, stValue)
-            if res != HIK.MV_OK:
-                raise HikCameraError(f"{get_func.__name__}({key}) failed, error code[{self.mvs_error_code(res)}]")
+            # get parameter from the camera
+            with self.lock:
+                res = get_func(key, stValue)
+                if res != HIK.MV_OK:
+                    raise HikCameraError(f"{get_func.__name__}({key}) failed, error code[{self.mvs_error_code(res)}]")
 
-        # decode parameter
-        value = getattr(stValue, attr)
-        if dtype == "istring":
-            value = value.decode()
-            show = value
-        elif dtype == "ienumeration":
-            enum_range = self.nodes[self.nodes.key == key]["enum_range"].iloc[0]
-            show = enum_range.get(value, f"{value}[unknown enum name]")
-        else:
-            show = value
+            # decode parameter
+            value = getattr(stValue, attr)
+            if dtype == "istring":
+                value = value.decode()
+                show = value
+            elif dtype == "ienumeration":
+                enum_range = self.nodes[self.nodes.key == key]["enum_range"].iloc[0]
+                show = enum_range.get(value, f"{value}[unknown enum name]")
+            else:
+                show = value
 
-        _logger.debug(f"{self.identity} {get_func.__name__}({key}) = {show}")
+            _logger.debug(f"{self.identity} {get_func.__name__}({key}) = {show}")
 
-        return value
+            return value
 
     def setitem(self, key: str, value: typing.Any):
         """
@@ -892,65 +857,96 @@ class HikrobotCamera(HIK.MvCamera):
         :param value:
         :return:
         """
-        if not self.access_mode.has_control_permission():
-            context = utils.get_call_context()
-            _logger.warning(f"{self.identity} {context.func_name}({key}) shouldn't be called in access mode[{self.access_mode.name}]")
-            return
-
-        # Get key setting data type
-        dtype = self.nodes[self.nodes.key == key]["dtype"].iloc[0]
-        # Retrieve parameter setter from MVS SDK for the given data type
-        if dtype == "iboolean":
-            set_func = self.MV_CC_SetBoolValue
-            params = (key, value)
-        elif dtype == "ienumeration":
-            if isinstance(value, str):
-                set_func = self.MV_CC_SetEnumValueByString
-            else:
-                set_func = self.MV_CC_SetEnumValue
-            params = (key, value)
-        elif dtype == "ifloat":
-            set_func = self.MV_CC_SetFloatValue
-            params = (key, value)
-        elif dtype == "iinteger":
-            set_func = self.MV_CC_SetIntValue
-            params = (key, value)
-        elif dtype == "istring":
-            set_func = self.MV_CC_SetStringValue
-            params = (key, value)
-        elif dtype == "icommand":
-            set_func = self.MV_CC_SetCommandValue
-            params = (key,)
-        # TODO set register function is not defined
-        # elif dtype == "register":
-        #     set_func = self.MV_CC_RegisterEventCallBackEx
+        if key in ["rotation", "resize_ratio"]:
+            self.set_custom_param(key=key, value=value)
         else:
-            context = utils.get_call_context()
-            raise TypeError(f"illegal dtype[{dtype}] in {context.func_name}({key})")
+            if not self.access_mode.has_control_permission():
+                _logger.warning(f"{self.identity} setitem({key}) shouldn't be called in access mode[{self.access_mode.name}]")
+                return
 
-        # set parameter of the camera
-        with self.lock:
-            res = set_func(*params)
-            if res != HIK.MV_OK:
-                raise HikCameraError(f"{set_func.__name__}{params} failed, error code[{self.mvs_error_code(res)}]")
+            # Get key setting data type
+            dtype = self.nodes[self.nodes.key == key]["dtype"].iloc[0]
+            # Retrieve parameter setter from MVS SDK for the given data type
+            if dtype == "iboolean":
+                set_func = self.MV_CC_SetBoolValue
+                params = (key, value)
+            elif dtype == "ienumeration":
+                if isinstance(value, str):
+                    set_func = self.MV_CC_SetEnumValueByString
+                else:
+                    set_func = self.MV_CC_SetEnumValue
+                params = (key, value)
+            elif dtype == "ifloat":
+                set_func = self.MV_CC_SetFloatValue
+                params = (key, value)
+            elif dtype == "iinteger":
+                set_func = self.MV_CC_SetIntValue
+                params = (key, value)
+            elif dtype == "istring":
+                set_func = self.MV_CC_SetStringValue
+                params = (key, value)
+            elif dtype == "icommand":
+                set_func = self.MV_CC_SetCommandValue
+                params = (key,)
+            # TODO set register function is not defined
+            # elif dtype == "register":
+            #     set_func = self.MV_CC_RegisterEventCallBackEx
+            else:
+                raise TypeError(f"illegal dtype[{dtype}] in setitem({key})")
 
-        # 更新 userid
-        if key == "DeviceUserID":
-            self.DeviceUserID = value
+            # set parameter of the camera
+            with self.lock:
+                res = set_func(*params)
+                if res != HIK.MV_OK:
+                    raise HikCameraError(f"{set_func.__name__}{params} failed, error code[{self.mvs_error_code(res)}]")
 
-        _logger.debug(f"{self.identity} {set_func.__name__}{params} done")
+            # 更新 userid
+            if key == "DeviceUserID":
+                self.DeviceUserID = value
+
+            _logger.debug(f"{self.identity} {set_func.__name__}{params} done")
 
     __getitem__ = getitem
     __setitem__ = setitem
 
-    def init_native_params(self):
-        """
-        用于相机参数设置，在相机打开后使用
-        可以重载，
-        :return:
-        """
-        for key, value in self.native_params.items():
-            self.setitem(key, value)
+    def get_custom_param(self, key):
+        if key == "rotation":
+            return self.get_rotation()
+        elif key == "resize_ratio":
+            return self.get_resize_ratio()
+        elif key == "image_size":
+            return self.get_image_size()
+        else:
+            raise HikCameraError(f"illegal parameter in get_custom_param({key})")
+
+    def set_custom_param(self, key, value):
+        if key == "rotation":
+            self.set_rotation(int(value))
+        elif key == "resize_ratio":
+            self.set_resize_ratio(None if value is None else float(value))
+        else:
+            raise HikCameraError(f"illegal parameter in set_custom_param({key}, {value})")
+
+    def get_rotation(self) -> int:
+        _logger.debug(f"{self.identity} get_rotation() = {self.rotation.name}")
+        return self.rotation.value
+
+    def set_rotation(self, rotation: int):
+        with self.lock:
+            try:
+                self.rotation = Rotation(rotation)
+                _logger.debug(f"{self.identity} set_rotation({rotation}) done")
+            except Exception as err:
+                raise ValueError(f"set_rotation({rotation}) error") from err
+
+    def get_resize_ratio(self) -> typing.Optional[float]:
+        _logger.debug(f"{self.identity} get_resize_ratio() = {self.resize_ratio}")
+        return self.resize_ratio
+
+    def set_resize_ratio(self, resize_ratio: typing.Optional[float]):
+        with self.lock:
+            self.resize_ratio = resize_ratio
+            _logger.debug(f"{self.identity} set_resize_ratio({self.resize_ratio}) done")
 
     def get_image_size(self) -> tuple[int, int]:
         """
@@ -969,10 +965,17 @@ class HikrobotCamera(HIK.MvCamera):
         if self.rotation.is_90():
             height, width = width, height
 
-        # 获取函数名称
-        context = utils.get_call_context()
-        _logger.debug(f"{self.identity} {context.func_name}() = ({height}, {width})")
+        _logger.debug(f"{self.identity} get_image_size() = ({height}, {width})")
         return height, width
+
+    def init_native_params(self):
+        """
+        用于相机参数设置，在相机打开后使用
+        可以重载，
+        :return:
+        """
+        for key, value in self.native_params.items():
+            self.setitem(key, value)
 
     def optimize_packet_size(self):
         """
@@ -1080,6 +1083,7 @@ class HikrobotCamera(HIK.MvCamera):
             raise FileNotFoundError(f"python script file[{py_file}] not found")
 
         # cmd 执行并， 获取输出
+        # todo 修改 -m hikrobot_camera.enum_all_ips
         res = subprocess.run(
             [sys.executable, "-m", "hikrobot_camera.enum_all_ips"],
             stdout=subprocess.PIPE,
@@ -1096,7 +1100,7 @@ class HikrobotCamera(HIK.MvCamera):
         # 去除 None 值
         ips = list(filter(None, ips))
 
-        _logger.debug(f"all camera ips = {ips}")
+        _logger.debug(f"[camera] all enumerated camera ips = {ips}")
         return ips
 
     @staticmethod
@@ -1163,7 +1167,7 @@ class HikrobotCamera(HIK.MvCamera):
                 raise HikCameraError(f"initialize mvs sdk failed, error code[{cls.mvs_error_code(res)}]")
             else:
                 setattr(cls, "_initialize", True)
-                _logger.debug(f"initialize mvs sdk successfully")
+                _logger.debug(f"[camera] initialize mvs sdk successfully")
 
     @classmethod
     def sdk_finalize(cls):
@@ -1175,10 +1179,10 @@ class HikrobotCamera(HIK.MvCamera):
         if getattr(cls, "_initialize", False):
             res = cls.MV_CC_Finalize()
             if res != HIK.MV_OK:
-                _logger.warning(f"finalize mvs sdk failed, error code[{cls.mvs_error_code(res)}]")
+                raise HikCameraError(f"finalize mvs sdk failed, error code[{cls.mvs_error_code(res)}]")
             else:
                 setattr(cls, "_initialize", False)
-                _logger.debug(f"finalize mvs sdk successfully")
+                _logger.debug(f"[camera] finalize mvs sdk successfully")
 
     @classmethod
     def get_devices_info_by_enum(cls, ip: typing.Optional[str] = None) -> typing.Union[dict[str, HIK.MV_CC_DEVICE_INFO], HIK.MV_CC_DEVICE_INFO]:
@@ -1277,7 +1281,7 @@ class HikrobotCamera(HIK.MvCamera):
             sdk_version_int = int(cls.MV_CC_GetSDKVersion())
             cls.sdk_version = "%x.%x.%x.%x" % (sdk_version_int >> 24 & 0xFF, sdk_version_int >> 16 & 0xFF, sdk_version_int >> 8 & 0xFF, sdk_version_int & 0xFF)
 
-            _logger.debug(f"mvs sdk version = {cls.sdk_version}")
+            _logger.debug(f"[camera] mvs sdk version = {cls.sdk_version}")
         return cls.sdk_version
 
     @classmethod
@@ -1400,29 +1404,3 @@ class HikrobotCamera(HIK.MvCamera):
 
 class HikCameraError(Exception):
     pass
-
-
-if __name__ == '__main__':
-    pass
-
-
-    try:
-        # multi cameras
-        with HikCamera.get_all_cameras(grab_method=2, TriggerMode="Off", access_mode=1) as _cams, CvShow() as _show:
-            for _idx, _key in enumerate(_show):
-                with boxx.timeit("get_one_frame", unit="ms") as _ti2:
-                        _frames = _cams.get_one_frame()
-                        for _IP, _image in _frames.items():
-                            _image = cv2.resize(
-                                _image, None, None,
-                                fx=0.4,
-                                fy=0.4,
-                                interpolation=cv2.INTER_AREA
-                            )
-                            _show.imshow(_image, window=_IP)
-                            _frames[_IP] = _image
-                        boxx.tree(_frames)
-                        if _key == "q":
-                            break
-    except Exception as err:
-        print(err)

@@ -40,5 +40,5 @@ class MultiHikrobotCameras(dict):
         self.__getattr__("__enter__")()
         return self
 
-    def __exit__(self,  exc_type, exc_value, traceback):
+    def __exit__(self, exc_type, exc_value, traceback):
         self.__getattr__("__exit__")(exc_type, exc_value, traceback)
