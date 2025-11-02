@@ -4,26 +4,24 @@ from hikrobot_camera import HikrobotCamera
 from hikrobot_camera.cv_show import CvShow
 
 
-
-if __name__ == '__main__':
+def init_logger():
     # 创建logger对象
     logger = logging.getLogger()
     # 设置全局最低等级（让所有handler能接收到）
     logger.setLevel(logging.DEBUG)
-
-    # === 控制台 Handler（只显示 WARNING 及以上） ===
+    # 控制台 Handler
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG)
     console_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     console_handler.setFormatter(console_formatter)
-
     # 添加 handler 到 logger
     logger.addHandler(console_handler)
 
-    # 设置特定日志等级
-    # logging.getLogger('apscheduler.executors.default').setLevel(logging.WARNING)
-    # logging.getLogger('snap7.client').setLevel(logging.WARNING)
+    # logging.getLogger('asyncio').setLevel(logging.INFO)
 
+
+if __name__ == '__main__':
+    init_logger()
 
     # 获取所有相机节点
     # _nodes = HikrobotCamera.load_nodes()
@@ -41,9 +39,9 @@ if __name__ == '__main__':
     _sdk_version = HikrobotCamera.get_sdk_version()
     print(_sdk_version)
 
-    # 枚举获得所有相机ip
-    _cam_ips = HikrobotCamera.enum_all_ips()
-    print(_cam_ips)
+    # # 枚举获得所有相机ip
+    # _cam_ips = HikrobotCamera.enum_all_ips()
+    # print(_cam_ips)
 
     # # 虚拟相机只能使用 枚举连接相机
     # with HikrobotCamera.create_camera(ip='192.168.31.230', TriggerMode="Off", grab_method=2, access_mode=1, create_handle_method=1) as _cam1:

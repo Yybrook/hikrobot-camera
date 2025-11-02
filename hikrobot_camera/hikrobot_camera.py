@@ -44,7 +44,7 @@ try:
         sys.path.insert(0, MVIMPORT_DIR)
     import MvCameraControl_class as HIK
 except ModuleNotFoundError as err:
-    _logger.exception(f"can't find MvCameraControl_class.py in [{MVIMPORT_DIR}], please install MVS SDK.")
+    # _logger.exception(f"can't find MvCameraControl_class.py in [{MVIMPORT_DIR}], please install MVS SDK.")
     raise ModuleNotFoundError(f"can't find MvCameraControl_class.py in [{MVIMPORT_DIR}]") from err
 finally:
     # 清理 sys.path，防止污染全局环境
@@ -84,6 +84,9 @@ class GrabMethod(enum.IntEnum):
     GetOneFrameTimeout = 1
     GetImageBuffer = 2
     RegisterImageCallBackEx = 3
+
+    def is_passive(self) -> bool:
+        return self == GrabMethod.RegisterImageCallBackEx
 
 class AccessMode(enum.IntEnum):
     """设备访问模式"""
@@ -157,7 +160,7 @@ class CameraCustomParams:
         # 根据 ip 确定 host ip
         if isinstance(self.host_ip, str):
             self.host_ip = self.host_ip.strip()
-        if self.host_ip == "":
+        if not self.host_ip:
             self.host_ip = utils.get_host_ip(target_ip=self._ip).strip()
 
         # 非独占模式下，根据 ip 确定 multicast_ip
@@ -293,7 +296,7 @@ class HikrobotCamera(HIK.MvCamera):
         # 加载相机参数
         self.native_params, self.custom_params = self.load_params(
             path=kwargs.pop("camera_params_path", None),
-            ip=self.ip
+            ip=kwargs["_ip"]
         )
         # 获取CameraCustomParams类所有字段名称
         camera_custom_params_fields = [f.name for f in dataclasses.fields(CameraCustomParams)]
@@ -342,9 +345,9 @@ class HikrobotCamera(HIK.MvCamera):
         if self.to_ping:
             res = utils.ping_ip(self.ip, host_ip=self.host_ip)
             if not res:
-                raise HikCameraError(f"ping [{self.ip}]{f" from [{self.host_ip}]" if self.host_ip is not None else ""} lost")
+                raise HikCameraError(f"ping {f"from [{self.host_ip}]" if self.host_ip is not None else ""} lost")
             else:
-                _logger.debug(f"{self.identity} ping [{self.ip}] successfully")
+                _logger.debug(f"{self.identity} ping {f"from [{self.host_ip}]" if self.host_ip is not None else ""} successfully")
 
     def __enter__(self) -> typing.Self:
         """
@@ -420,8 +423,7 @@ class HikrobotCamera(HIK.MvCamera):
             # Set the GigE device info structure's IP address to the camera's IP address
             stGigEDev.nCurrentIp = utils.ip_2_int(self.ip)
             # Set the GigE device info structure's network interface IP address to the network interface's IP address
-            if self.host_ip is not None:
-                stGigEDev.nNetExport = utils.ip_2_int(self.host_ip)
+            stGigEDev.nNetExport = utils.ip_2_int(self.host_ip)
             # Instantiate a device info structure
             stDevInfo = HIK.MV_CC_DEVICE_INFO()
             stDevInfo.nTLayerType = HIK.MV_GIGE_DEVICE  # When using GigE cameras
@@ -473,7 +475,7 @@ class HikrobotCamera(HIK.MvCamera):
         if not res:
             raise HikCameraError(f"device[{self.ip}] unaccessible in access mode[{self.access_mode.name}]")
         else:
-            _logger.debug(f"{self.identity} device accessible")
+            _logger.debug(f"{self.identity} device accessible in access mode[{self.access_mode.name}]")
 
         # 打开相机
         res = self.MV_CC_OpenDevice(self.access_mode.value, 0)
@@ -846,7 +848,7 @@ class HikrobotCamera(HIK.MvCamera):
             else:
                 show = value
 
-            _logger.debug(f"{self.identity} {get_func.__name__}({key}) = {show}")
+            _logger.debug(f"{self.identity} {get_func.__name__}({key})={show}")
 
             return value
 
@@ -928,7 +930,7 @@ class HikrobotCamera(HIK.MvCamera):
             raise HikCameraError(f"illegal parameter in set_custom_param({key}, {value})")
 
     def get_rotation(self) -> int:
-        _logger.debug(f"{self.identity} get_rotation() = {self.rotation.name}")
+        _logger.debug(f"{self.identity} get_rotation()={self.rotation.name}")
         return self.rotation.value
 
     def set_rotation(self, rotation: int):
@@ -940,7 +942,7 @@ class HikrobotCamera(HIK.MvCamera):
                 raise ValueError(f"set_rotation({rotation}) error") from err
 
     def get_resize_ratio(self) -> typing.Optional[float]:
-        _logger.debug(f"{self.identity} get_resize_ratio() = {self.resize_ratio}")
+        _logger.debug(f"{self.identity} get_resize_ratio()={self.resize_ratio}")
         return self.resize_ratio
 
     def set_resize_ratio(self, resize_ratio: typing.Optional[float]):
@@ -965,7 +967,7 @@ class HikrobotCamera(HIK.MvCamera):
         if self.rotation.is_90():
             height, width = width, height
 
-        _logger.debug(f"{self.identity} get_image_size() = ({height}, {width})")
+        _logger.debug(f"{self.identity} get_image_size()=({height},{width})")
         return height, width
 
     def init_native_params(self):
@@ -987,7 +989,7 @@ class HikrobotCamera(HIK.MvCamera):
         if nPacketSize <= 0:
             raise HikCameraError(f"{self.MV_CC_GetOptimalPacketSize.__name__}() failed, error nPacketSize = {nPacketSize}")
         else:
-            _logger.debug(f"{self.identity} {self.MV_CC_GetOptimalPacketSize.__name__}() = {nPacketSize}")
+            _logger.debug(f"{self.identity} {self.MV_CC_GetOptimalPacketSize.__name__}()={nPacketSize}")
         # 设置网络包大小
         # GevSCPSPacketSize -> 网络包大小。＞0,与相机相关。一般范围在220-9156，步进为8
         self["GevSCPSPacketSize"] = nPacketSize
@@ -1100,7 +1102,7 @@ class HikrobotCamera(HIK.MvCamera):
         # 去除 None 值
         ips = list(filter(None, ips))
 
-        _logger.debug(f"[camera] all enumerated camera ips = {ips}")
+        _logger.debug(f"[camera] enum_all_ips()={ips}")
         return ips
 
     @staticmethod
@@ -1156,7 +1158,9 @@ class HikrobotCamera(HIK.MvCamera):
     # --------------------------------------------------------------------------- #
     @classmethod
     def sdk_initialize(cls):
-        """初始化SDK"""
+        """初始化SDK，4.2.0.3 版本以上才有这个方法"""
+        # 获取sdk版本号
+        cls.get_sdk_version()
         # 4.2.0.3 版本以上才有这个方法
         if float(cls.sdk_version[:3]) <= 4.2:
             return
@@ -1237,7 +1241,7 @@ class HikrobotCamera(HIK.MvCamera):
         if ips is None:
             ips = cls.enum_all_ips()
         ips = sorted(ips)
-        cameras = MultiHikrobotCameras({ip: cls(_ip=ip, **kwargs) for ip in ips})
+        cameras = MultiHikrobotCameras({ip: cls(ip=ip, **kwargs) for ip in ips})
 
         return cameras
 
@@ -1259,16 +1263,16 @@ class HikrobotCamera(HIK.MvCamera):
             ips = cls.enum_all_ips()
             if not ips:
                 raise ConnectionError(f"no camera is connected")
-            camera = cls(_ip=ips[0], **kwargs)
+            camera = cls(ip=ips[0], **kwargs)
         # 定位 ip地址
         elif ip is not None:
-            camera = cls(_ip=ip, **kwargs)
+            camera = cls(ip=ip, **kwargs)
         # 定位 index
         else:
             ips = cls.enum_all_ips()
             if index >= len(ips) or index < 0:
                 raise ValueError(f"camera index[{index}] out of range[0-{len(ips) - 1}]")
-            camera = cls(_ip=ips[index], **kwargs)
+            camera = cls(ip=ips[index], **kwargs)
         return camera
 
     @classmethod
@@ -1280,8 +1284,7 @@ class HikrobotCamera(HIK.MvCamera):
         if not hasattr(cls, "sdk_version"):
             sdk_version_int = int(cls.MV_CC_GetSDKVersion())
             cls.sdk_version = "%x.%x.%x.%x" % (sdk_version_int >> 24 & 0xFF, sdk_version_int >> 16 & 0xFF, sdk_version_int >> 8 & 0xFF, sdk_version_int & 0xFF)
-
-            _logger.debug(f"[camera] mvs sdk version = {cls.sdk_version}")
+            _logger.debug(f"[camera] get_sdk_version()={cls.sdk_version}")
         return cls.sdk_version
 
     @classmethod
@@ -1302,6 +1305,7 @@ class HikrobotCamera(HIK.MvCamera):
         def merge_params(local_: dict, global_: dict) -> dict:
             """局部参数优先，合并全局参数"""
             return {**global_, **local_}
+
 
         # 缓存机制：只加载一次
         if not hasattr(cls, "_params_cache"):
