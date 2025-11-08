@@ -757,9 +757,13 @@ class HikrobotCamera(HIK.MvCamera):
         # 灰度图
         if self.stFrameInfo.enPixelType == HIK.PixelType_Gvsp_Mono8:
             image_data = np.reshape(image_data, (self.stFrameInfo.nHeight, self.stFrameInfo.nWidth))
-        # RGB
+        # RGB8_Packed -> 解码后的彩色图像
         elif self.stFrameInfo.enPixelType == HIK.PixelType_Gvsp_RGB8_Packed:
             image_data = np.reshape(image_data, (self.stFrameInfo.nHeight, self.stFrameInfo.nWidth, -1))
+        # BayerRG8 -> 原始传感器数据
+        elif self.stFrameInfo.enPixelType == HIK.PixelType_Gvsp_BayerRG8:
+            image_data = np.reshape(image_data, (self.stFrameInfo.nHeight, self.stFrameInfo.nWidth))
+            image_data = cv2.cvtColor(image_data, cv2.COLOR_BAYER_RG2BGR)
         else:
             raise NotImplementedError(f"frame enPixelType[{self.stFrameInfo.enPixelType}] is not supported to convert to numpy array now")
 
@@ -859,6 +863,9 @@ class HikrobotCamera(HIK.MvCamera):
         :param value:
         :return:
         """
+        if value is None and key != "resize_ratio":
+            return
+
         if key in ["rotation", "resize_ratio"]:
             self.set_custom_param(key=key, value=value)
         else:

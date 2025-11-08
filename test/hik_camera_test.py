@@ -54,11 +54,16 @@ if __name__ == '__main__':
     #     print(_frame.shape)
 
     # 打开相机
-    with HikrobotCamera.create_all_cameras(TriggerMode="Off", grab_method=2, access_mode=1, create_handle_method=1) as _cams, CvShow() as _show:
+    with HikrobotCamera.create_all_cameras(
+            grab_method=2, access_mode=1, create_handle_method=1,
+            ExposureAuto="Continuous", ExposureTime=None,
+            TriggerMode="Off",
+    ) as _cams, CvShow() as _show:
         for _idx, _key in enumerate(_show):
             _frames = _cams.get_one_frame()
             for _ip, _frame in _frames.items():
-                _image = cv2.resize(_frame, None, None, fx=0.4, fy=0.4, interpolation=cv2.INTER_AREA)
+                # print(_frame.shape)
+                _image = cv2.resize(_frame, None, None, fx=0.2, fy=0.2, interpolation=cv2.INTER_AREA)
                 _show.imshow(_image, window=_ip)
             if _key == "q":
                 break
