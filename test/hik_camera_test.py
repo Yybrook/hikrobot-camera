@@ -21,49 +21,68 @@ def init_logger():
 
 
 if __name__ == '__main__':
-    init_logger()
 
-    # 获取所有相机节点
-    # _nodes = HikrobotCamera.load_nodes()
-    # print(_nodes)
+    try:
+        init_logger()
 
-    # 获取相机参数
-    # _params = HikrobotCamera.load_params()
-    # print(_params)
+        # 获取SDK版本
+        _sdk_version = HikrobotCamera.get_sdk_version()
+        print("sdk version: ", _sdk_version)
 
-    # # 通过枚举获取所有设备信息
-    # _devices_info = HikrobotCamera.get_devices_info_by_enum()
-    # print(_devices_info)
+        # 获取所有相机节点
+        # _nodes = HikrobotCamera.load_nodes()
+        # print(_nodes)
 
-    # 获取SDK版本
-    _sdk_version = HikrobotCamera.get_sdk_version()
-    print(_sdk_version)
+        # 获取相机参数
+        # _params = HikrobotCamera.load_params()
+        # print(_params)
 
-    # # 枚举获得所有相机ip
-    # _cam_ips = HikrobotCamera.enum_all_ips()
-    # print(_cam_ips)
+        # # 通过枚举获取所有设备信息
+        # _devices_info = HikrobotCamera.get_devices_info_by_enum()
+        # print(_devices_info)
 
-    # # 虚拟相机只能使用 枚举连接相机
-    # with HikrobotCamera.create_camera(ip='192.168.31.230', TriggerMode="Off", grab_method=2, access_mode=1, create_handle_method=1) as _cam1:
-    #     _frame = _cam1.get_one_frame()
-    #     print(_frame.shape)
-    #
-    # # 使用 ip直连连接相机
-    # with HikrobotCamera.create_camera(ip='10.64.38.29', TriggerMode="Off", grab_method=2, access_mode=1, create_handle_method=1) as _cam:
-    #     _frame = _cam.get_one_frame()
-    #     print(_frame.shape)
+        # # 枚举获得所有相机ip
+        # _cam_ips = HikrobotCamera.enum_all_ips()
+        # print(_cam_ips)
 
-    # 打开相机
-    with HikrobotCamera.create_all_cameras(
-            grab_method=2, access_mode=1, create_handle_method=1,
-            ExposureAuto="Continuous", ExposureTime=None,
-            TriggerMode="Off",
-    ) as _cams, CvShow() as _show:
-        for _idx, _key in enumerate(_show):
-            _frames = _cams.get_one_frame()
-            for _ip, _frame in _frames.items():
-                # print(_frame.shape)
-                _image = cv2.resize(_frame, None, None, fx=0.2, fy=0.2, interpolation=cv2.INTER_AREA)
-                _show.imshow(_image, window=_ip)
-            if _key == "q":
-                break
+        # # 连接一个相机
+        # # 虚拟相机只能使用枚举连接相机
+        # with HikrobotCamera.create_camera(
+        #         ip='192.168.31.230',
+        #         grab_method=2, access_mode=1, create_handle_method=1,
+        #         ExposureAuto="Continuous", ExposureTime=None,
+        #         GainAuto="Continuous", Gain=None,
+        #         Brightness=100,
+        #         TriggerMode="Off",
+        # ) as _cam1:
+        #     try:
+        #         _frame = _cam1.get_one_frame()
+        #         print(f"Camera[{_cam1.ip}] shape: {_frame.shape}")
+        #     except Exception as err:
+        #         print(f"Camera[{_cam1.ip}] raised error: {err}")
+
+        # 连接所有相机
+        with HikrobotCamera.create_all_cameras(
+                grab_method=2, access_mode=1, create_handle_method=1,
+                ExposureAuto="Continuous", ExposureTime=None,
+                GainAuto="Continuous", Gain=None,
+                Brightness=100,
+                TriggerMode="Off",
+        ) as _cams, CvShow() as _show:
+            for _idx, _key in enumerate(_show):
+                _frames = _cams.get_one_frame()
+                for _ip, _frame in _frames.items():
+                    if isinstance(_frame, BaseException):
+                        print(f"Camera[{_ip}] raised error: {_frame}")
+                        continue
+                    else:
+                        # print(f"Camera[{_ip}] shape: {_frame.shape}")
+                        _image = cv2.resize(_frame, None, None, fx=0.2, fy=0.2, interpolation=cv2.INTER_AREA)
+                        _show.imshow(_image, window=_ip)
+                if _key == "q":
+                    break
+
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt")
+    finally:
+        print("Ended")
