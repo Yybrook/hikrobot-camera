@@ -68,6 +68,7 @@ if __name__ == '__main__':
                 GainAuto="Continuous", Gain=None,
                 Brightness=100,
                 TriggerMode="Off",
+                AcquisitionFrameRateEnable=True, AcquisitionFrameRate=1,
         ) as _cams, CvShow() as _show:
             for _idx, _key in enumerate(_show):
                 _frames = _cams.get_one_frame()

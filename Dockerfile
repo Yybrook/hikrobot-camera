@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # 必要工具
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    net-tools curl iputils-ping unzip wget traceroute ca-certificates
+    net-tools curl iputils-ping unzip wget traceroute ca-certificates dos2unix
 
 # opencv 相关
 RUN apt-get install -y --no-install-recommends \
@@ -49,7 +49,9 @@ WORKDIR /hikrobot-camera
 
 RUN uv sync
 
-RUN chmod +x entrypoint.sh
+
+RUN dos2unix entrypoint.sh && \
+    chmod +x entrypoint.sh
 
 ENTRYPOINT ["/hikrobot-camera/entrypoint.sh"]
 
